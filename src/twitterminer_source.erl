@@ -91,7 +91,7 @@ receive_tweets({init, URL, Keys}) ->
   % I have never managed to receive a stall warning, but it would
   % be a good idea to handle them somehow (or at least log).
   SignedParams = oauth:sign("GET", URL, [{delimited, length},
-    {stall_warnings, true}], Consumer, AccessToken, AccessTokenSecret),
+    {stall_warnings, true}, {language, en}], Consumer, AccessToken, AccessTokenSecret),
 
   % We use stream_to self() to get the HTTP stream delivered to our process as individual messages.
   % We send the authentication parameters encoded in URI. I tried putting them in HTTP
