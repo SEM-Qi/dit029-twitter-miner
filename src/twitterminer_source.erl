@@ -1,6 +1,6 @@
 -module(twitterminer_source).
 
--export([twitter_example/0, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
+-export([collater/1,twitter_example/0, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
 
 -record(account_keys, {api_key, api_secret,
                        access_token, access_token_secret}).
@@ -18,7 +18,45 @@ get_account_keys(Name) ->
                 access_token=keyfind(access_token, Keys),
                 access_token_secret=keyfind(access_token_secret, Keys)}.
 
+countTags([]) -> ok;
+countTags([H|T]) ->
+  if
+    is_list(H) ->
+      [H1|_] = H,
+      io:format("Tag: ~ts", [H1]),
+      io:format(" x ~B~n", [length(H)]);
+    true ->
+      io:format("Tag: ~ts", [H]),
+      io:format(" x ~B~n", [1])
+    
+  end,
+  countTags(T).
+
+splitList([], _, R) -> R;
+splitList([H|[H1|[]]], Acc, R) when H =:= H1 ->
+  splitList([], [], [[H1|[H|Acc]]|R]);
+splitList([H|[H1|[]]], Acc, R) when H /= H1 ->
+  splitList([], [], [H1|[[H|Acc]|R]]);
+splitList([H|[H1|T1]], Acc, R) when H =:= H1 ->
+  splitList([H1|T1], [H|Acc], R);
+splitList([H|[H1|T1]], Acc, R) when H /= H1 ->
+  splitList([H1|T1], [], [[H|Acc]|R]).
+  
+
+collater(L) -> 
+  receive
+    {hashtags, Tag} ->
+      % io:format("TAG: ~ts~n", [Tag]),
+      collater([Tag|L]);
+    cancel ->
+      X = lists:sort(L),
+      Y = splitList(X, [], []),
+      countTags(lists:sort(Y)),
+      io:format("Total Tags x ~B~n", [length(L)])
+  end.
+
 %% @doc This example will download a sample of tweets and print it.
+
 twitter_example() ->
   URL = "https://stream.twitter.com/1.1/statuses/sample.json",
 
@@ -27,13 +65,18 @@ twitter_example() ->
 
   % Run our pipeline
   P = twitterminer_pipeline:build_link(twitter_print_pipeline(URL, Keys)),
-
+  
+  Pid = spawn(?MODULE, collater, [[]]),
+  
+  register(collate, Pid),
   % If the pipeline does not terminate after 60 s, this process will
   % force it.
+
   T = spawn_link(fun () ->
         receive
           cancel -> ok
         after 60000 -> % Sleep fo 60 s
+            collate ! cancel,
             twitterminer_pipeline:terminate(P)
         end
     end),
@@ -159,6 +202,15 @@ decorate_with_id(B) ->
     _ -> {invalid_tweet, B}
   end.
 
+parseT([]) -> ok;
+parseT([H|T]) -> 
+  {[{_,Tag},{_,_}]} = H,
+  collate ! {hashtags, Tag},
+  parseT(T).
+  % {[{_,Tag},{_,_}]} = H, 
+  % io:format("TAG: ~ts~n", [Tag]), 
+  % parseT(T).
+
 my_print(T) ->
   case T of
     {parsed_tweet, L, B, _} ->
@@ -173,7 +225,17 @@ my_print(T) ->
           %  {found, _} -> io:format("deleted: ~p~n", [L]);
           %  not_found -> io:format("~s~n", [B])
           %end
+      end,
+      case extract(<<"entities">>, L) of
+        {found, {[{_,[]}|_]}} -> ok;
+        % {found, _} -> io:format("THERE ARE TAGS");
+        {found, {[{_,Z}|_]}} -> parseT(Z);
+        not_found -> ok
       end;
+      % case extract(<<"hashtags">>, L) of
+      %   {found, _} -> io:format("HASHTAGS PRESENT~n");
+      %   not_found -> ok
+      % end;
     {invalid_tweet, B} -> io:format("failed to parse: ~s~n", [B])
   end.
 
