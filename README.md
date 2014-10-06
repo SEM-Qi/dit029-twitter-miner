@@ -32,6 +32,7 @@ This is a demonstrator Twitter streaming API client for the DIT029 course at [Go
         $ rebar compile
 
 1.  Get a Twitter account and generate authentication keys
+    (We have this already, check the Google drive under technical documentation. Be aware that I dont know if we can simultaneously access the stream with these credentials)
 
     1.  Open a Twitter account at https://twitter.com .
 
