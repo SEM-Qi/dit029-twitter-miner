@@ -62,10 +62,10 @@ This is a demonstrator Twitter streaming API client for the DIT029 course at [Go
     1> [application:start(A) || A <- [asn1, crypto, public_key, ssl, ibrowse, twitterminer]].
     ```
 
-    Now you are ready to run your example.
+    Now you are ready to run your example as below. The first argument is the number of milliseconds you wish to run the miner for, the second is the minimum frequency required for a tag to be printed at the end. Here it is ten minutes with only tags occuring 3 or more times being printed.
 
     ```erlang
-    2> twitterminer_source:twitter_example().
+    2> twitterminer_source:twitter_example(600000, 3).
     ```
 
     If everything goes OK, you should see a stream of tweets running for 60 s. If you get a message indicating HTTP response code 401, it probably means authentication error.

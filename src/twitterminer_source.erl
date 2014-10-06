@@ -1,6 +1,6 @@
 -module(twitterminer_source).
 
--export([collater/1,twitter_example/0, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
+-export([collater/2,twitter_example/2, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
 
 -record(account_keys, {api_key, api_secret,
                        access_token, access_token_secret}).
@@ -18,46 +18,75 @@ get_account_keys(Name) ->
                 access_token=keyfind(access_token, Keys),
                 access_token_secret=keyfind(access_token_secret, Keys)}.
 
-countTags([]) -> ok;
-countTags([H|T]) ->
-  if
-    is_list(H) ->
-      [H1|_] = H,
-      io:format("Tag: ~ts", [H1]),
-      io:format(" x ~B~n", [length(H)]);
-    true ->
-      io:format("Tag: ~ts", [H]),
-      io:format(" x ~B~n", [1])
+
+%%-------------------Alt implementation---------------%%
+% countTags([H|T]) ->
+%   if
+%     is_list(H) ->
+%       [H1|_] = H,
+%       io:format("Tag: ~ts", [H1]),
+%       io:format(" x ~B~n", [length(H)]);
+%     true ->
+%       io:format("Tag: ~ts", [H]),
+%       io:format(" x ~B~n", [1])
     
-  end,
-  countTags(T).
+%   end,
+%   countTags(T).
 
-splitList([], _, R) -> R;
-splitList([H|[H1|[]]], Acc, R) when H =:= H1 ->
-  splitList([], [], [[H1|[H|Acc]]|R]);
-splitList([H|[H1|[]]], Acc, R) when H /= H1 ->
-  splitList([], [], [H1|[[H|Acc]|R]]);
-splitList([H|[H1|T1]], Acc, R) when H =:= H1 ->
-  splitList([H1|T1], [H|Acc], R);
-splitList([H|[H1|T1]], Acc, R) when H /= H1 ->
-  splitList([H1|T1], [], [[H|Acc]|R]).
-  
+% splitList([], _, R) -> R;
+% splitList([H|[H1|[]]], Acc, R) when H =:= H1 ->
+%   splitList([], [], [[H1|[H|Acc]]|R]);
+% splitList([H|[H1|[]]], Acc, R) when H /= H1 ->
+%   splitList([], [], [H1|[[H|Acc]|R]]);
+% splitList([H|[H1|T1]], Acc, R) when H =:= H1 ->
+%   splitList([H1|T1], [H|Acc], R);
+% splitList([H|[H1|T1]], Acc, R) when H /= H1 ->
+%   splitList([H1|T1], [], [[H|Acc]|R]).
 
-collater(L) -> 
+% collater(L) -> 
+%   receive
+%     {hashtags, Tag} ->
+%       % io:format("TAG: ~ts~n", [Tag]),
+%       collater([Tag|L]);
+%     cancel ->
+%       X = lists:sort(L),
+%       Y = splitList(X, [], []),
+%       countTags(lists:sort(X)),
+%       io:format("Total Tags x ~B~n", [length(L)])
+%   end.
+%%-------------------/Alt implementation---------------%%
+
+%%Naively aggregates the tag count of a sorted list (sorted required as tags compared consecutively).
+countTags([], []) -> ok;
+countTags([], L) -> L;
+
+countTags([{Tag, X}|[]], L) ->
+  countTags([], [{X, Tag}|L]);
+
+countTags([{Tag1, X}|[{Tag1, Y}|Rest]], L) ->
+  countTags([{Tag1, X+Y}|Rest], L);
+
+countTags([{Tag, X}|T], L) ->
+  countTags(T, [{X, Tag}|L]).
+
+%%Recieves and listifies tags used
+%%On cancel at end of stream organises list and prints tags
+collater(L, TagFilter) -> 
   receive
     {hashtags, Tag} ->
       % io:format("TAG: ~ts~n", [Tag]),
-      collater([Tag|L]);
+      collater([{Tag, 1}|L], TagFilter);
     cancel ->
       X = lists:sort(L),
-      Y = splitList(X, [], []),
-      countTags(lists:sort(Y)),
+      Y = lists:sort(countTags(X, [])),
+      [io:format("Tag: ~ts x ~B~n", [Tag, Num]) || {Num, Tag} <- Y, Num >= TagFilter],
       io:format("Total Tags x ~B~n", [length(L)])
-  end.
+  end.  
+
 
 %% @doc This example will download a sample of tweets and print it.
 
-twitter_example() ->
+twitter_example(Time, TagFilter) ->
   URL = "https://stream.twitter.com/1.1/statuses/sample.json",
 
   % We get our keys from the twitterminer.config configuration file.
@@ -66,7 +95,7 @@ twitter_example() ->
   % Run our pipeline
   P = twitterminer_pipeline:build_link(twitter_print_pipeline(URL, Keys)),
   
-  Pid = spawn(?MODULE, collater, [[]]),
+  Pid = spawn_link(?MODULE, collater, [[], TagFilter]),
   
   register(collate, Pid),
   % If the pipeline does not terminate after 60 s, this process will
@@ -75,7 +104,7 @@ twitter_example() ->
   T = spawn_link(fun () ->
         receive
           cancel -> ok
-        after 60000 -> % Sleep fo 60 s
+        after Time -> % Sleep fo 60 s
             collate ! cancel,
             twitterminer_pipeline:terminate(P)
         end
