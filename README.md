@@ -69,7 +69,7 @@ This is a demonstrator Twitter streaming API client for the DIT029 course at [Go
     2> twitterminer_source:twitter_example(600000, 3).
     ```
 
-    If everything goes OK, you should see a stream of tweets running for 60 s. If you get a message indicating HTTP response code 401, it probably means authentication error.
+    If everything goes OK, you should see a stream of tweets running for your specified time. If you get a message indicating HTTP response code 401, it probably means authentication error. Due to a known bug (unrelated to any HTTP error), please restart the shell before attempting to reconnect to Twitter.
 
 ## Dependencies
 
