@@ -51,7 +51,6 @@ riakPut(SocketPID) ->
 % 	Key - ? autogenerate?
 % 	Value - all data? - specifically other tags used?
 createRiakObj(Tag, CoTags, Tweet) -> 
-	io:format("Creating Object ~n"),
 	Value = {CoTags, Tweet},
 	riakc_obj:new(Tag,
 	            undefined, %% undefined autogenerates keys
@@ -59,28 +58,24 @@ createRiakObj(Tag, CoTags, Tweet) ->
 % insert 2i
 % 	2i - timestamp (seconds since epoch)
 addTagIndex(Object) ->
-	io:format("Adding Meta Data ~n"),
 	MD1 = riakc_obj:get_update_metadata(Object),
 	MD2 = riakc_obj:set_secondary_index(MD1, [{{integer_index, "timestamp"}, [timeStamp()]}]),
 	riakc_obj:update_metadata(Object, MD2).
 
 
 putRiakObj(SocketPID, TagObject) ->
-	io:format("Putting Data in ~n"),
 	riakc_pb_socket:put(SocketPID, TagObject).
 
 % delete from riak all tags with timestamps older than 20 (or whatever?) min.
 % 	try to implement streaming? Probably only if super slow, 
 % 	i believe it sends keys as messages? so handle as receive?
 deleteOld(SocketPID, Tag) -> 
-	io:format("Finding old Data ~n"),
 	{ok, {_,Results,_,_}} = riakc_pb_socket:get_index_range(
     	SocketPID,
     	Tag, %% bucket name
     	{integer_index, "timestamp"}, %% index name
     	1413218244414109, oldTimeStamp() %% origin timestamp should eventually have some logic attached
 		),
-	io:format("Deleting old Data ~n"),
 	[riakc_pb_socket:delete(SocketPID, Tag, X) || X <- Results],
 	ok.
 	
