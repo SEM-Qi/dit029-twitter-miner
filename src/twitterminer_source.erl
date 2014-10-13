@@ -1,6 +1,6 @@
 -module(twitterminer_source).
 
--export([collater/2,twitter_example/2, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
+-export([collater/1,twitter_example/1, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
 
 -record(account_keys, {api_key, api_secret,
                        access_token, access_token_secret}).
@@ -57,36 +57,41 @@ get_account_keys(Name) ->
 %%-------------------/Alt implementation---------------%%
 
 %%Naively aggregates the tag count of a sorted list (sorted required as tags compared consecutively).
-countTags([], []) -> ok;
-countTags([], L) -> L;
+% countTags([], []) -> ok;
+% countTags([], L) -> L;
 
-countTags([{Tag, X}|[]], L) ->
-  countTags([], [{X, Tag}|L]);
+% countTags([{Tag, X}|[]], L) ->
+%   countTags([], [{X, Tag}|L]);
 
-countTags([{Tag1, X}|[{Tag1, Y}|Rest]], L) ->
-  countTags([{Tag1, X+Y}|Rest], L);
+% countTags([{Tag1, X}|[{Tag1, Y}|Rest]], L) ->
+%   countTags([{Tag1, X+Y}|Rest], L);
 
-countTags([{Tag, X}|T], L) ->
-  countTags(T, [{X, Tag}|L]).
+% countTags([{Tag, X}|T], L) ->
+%   countTags(T, [{X, Tag}|L]).
 
 %%Recieves and listifies tags used
 %%On cancel at end of stream organises list and prints tags
-collater(L, TagFilter) -> 
+collater(PutRiak) -> 
   receive
-    {hashtags, Tag} ->
+    {hashtags, Tags, TweetInfo} ->
       % io:format("TAG: ~ts~n", [Tag]),
-      collater([{Tag, 1}|L], TagFilter);
+      % collater([{Tag, 1}|L], TagFilter);
+      [PutRiak ! {store, Tag, Tags, TweetInfo} || Tag <- Tags],
+      collater(PutRiak);
     cancel ->
-      X = lists:sort(L),
-      Y = lists:sort(countTags(X, [])),
-      [io:format("Tag: ~ts x ~B~n", [Tag, Num]) || {Num, Tag} <- Y, Num >= TagFilter],
-      io:format("Total Tags x ~B~n", [length(L)])
+      PutRiak ! stop
   end.  
 
 
 %% @doc This example will download a sample of tweets and print it.
 
-twitter_example(Time, TagFilter) ->
+twitter_example(Time) ->
+  IP = "172.31.40.116",
+  SocketPID = twitterminer_riak:riakSocket(IP),
+  % SocketPID = spawn_link(twitterminer_riak, riakSocket, [IP]),
+  % PutRiak = twitterminer_riak:riakPut(SocketPID),
+  PutRiak = spawn_link(twitterminer_riak, riakPut, [SocketPID]),
+
   URL = "https://stream.twitter.com/1.1/statuses/sample.json",
 
   % We get our keys from the twitterminer.config configuration file.
@@ -95,7 +100,7 @@ twitter_example(Time, TagFilter) ->
   % Run our pipeline
   P = twitterminer_pipeline:build_link(twitter_print_pipeline(URL, Keys)),
   
-  Pid = spawn_link(?MODULE, collater, [[], TagFilter]),
+  Pid = spawn_link(?MODULE, collater, [PutRiak]),
   
   register(collate, Pid),
   % If the pipeline does not terminate after 60 s, this process will
@@ -231,11 +236,13 @@ decorate_with_id(B) ->
     _ -> {invalid_tweet, B}
   end.
 
-parseT([]) -> ok;
-parseT([H|T]) -> 
+parseT([], _) -> ok;
+parseT(L, TweetInfo) -> parseT(L, [], TweetInfo).
+
+parseT([], Tags, TweetInfo) -> collate ! {hashtags, Tags, TweetInfo};
+parseT([H|T], Tags, TweetInfo) -> 
   {[{_,Tag},{_,_}]} = H,
-  collate ! {hashtags, Tag},
-  parseT(T).
+  parseT(T, [Tag|Tags], TweetInfo).
   % {[{_,Tag},{_,_}]} = H, 
   % io:format("TAG: ~ts~n", [Tag]), 
   % parseT(T).
@@ -248,7 +255,8 @@ my_print(T) ->
         not_found -> ok
       end,
       case extract(<<"text">>, L) of
-        {found, TT} -> io:format("tweet: ~ts~n", [TT]);
+        {found, _} -> ok;
+        % {found, TT} -> io:format("tweet: ~ts~n", [TT]); % Prints tweet
         not_found -> ok
           %case extract(<<"delete">>, L) of
           %  {found, _} -> io:format("deleted: ~p~n", [L]);
@@ -257,14 +265,9 @@ my_print(T) ->
       end,
       case extract(<<"entities">>, L) of
         {found, {[{_,[]}|_]}} -> ok;
-        % {found, _} -> io:format("THERE ARE TAGS");
-        {found, {[{_,Z}|_]}} -> parseT(Z);
+        {found, {[{_,Z}|_]}} -> parseT(Z, L);
         not_found -> ok
       end;
-      % case extract(<<"hashtags">>, L) of
-      %   {found, _} -> io:format("HASHTAGS PRESENT~n");
-      %   not_found -> ok
-      % end;
     {invalid_tweet, B} -> io:format("failed to parse: ~s~n", [B])
   end.
 
