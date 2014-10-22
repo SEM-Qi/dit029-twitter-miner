@@ -10,7 +10,7 @@ This is a demonstrator Twitter streaming API client for the DIT029 course at [Go
 
 1.  Get Erlang
 
-    You need an Erlang installation to run this project.
+    You really need an Erlang installation to run this project.
 
 1.  Get Rebar
 
