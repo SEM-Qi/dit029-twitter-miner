@@ -69,17 +69,15 @@ get_account_keys(Name) ->
 % countTags([{Tag, X}|T], L) ->
 %   countTags(T, [{X, Tag}|L]).
 
-%%Recieves and listifies tags used
-%%On cancel at end of stream organises list and prints tags
+%% Pushes each tag to to Riak
 collater(PutRiak) -> 
   receive
-    {hashtags, Tags, TweetInfo} ->
-      % io:format("TAG: ~ts~n", [Tag]),
-      % collater([{Tag, 1}|L], TagFilter);
-      [PutRiak ! {store, Tag, Tags, TweetInfo} || Tag <- Tags],
+    {hashtags, Tags, Tweet} ->
+      [PutRiak ! {store, Tag, Tags, Tweet} || Tag <- Tags],
       collater(PutRiak);
     cancel ->
-      PutRiak ! stop
+      PutRiak ! stop;
+    _ -> collater(PutRiak)
   end.  
 
 
@@ -88,9 +86,10 @@ collater(PutRiak) ->
 twitter_example(Time) ->
   IP = "172.31.40.116",
   SocketPID = twitterminer_riak:riakSocket(IP),
+  DeleteSocketPID = twitterminer_riak:riakSocket(IP),
   % SocketPID = spawn_link(twitterminer_riak, riakSocket, [IP]),
   % PutRiak = twitterminer_riak:riakPut(SocketPID),
-  PutRiak = spawn_link(twitterminer_riak, riakPut, [SocketPID]),
+  PutRiak = spawn_link(twitterminer_riak, riakPut, [SocketPID, DeleteSocketPID, 0, IP]),
 
   URL = "https://stream.twitter.com/1.1/statuses/sample.json",
 
@@ -109,15 +108,18 @@ twitter_example(Time) ->
   T = spawn_link(fun () ->
         receive
           cancel -> ok
-        after Time -> % Sleep fo 60 s
-            collate ! cancel,
-            twitterminer_pipeline:terminate(P)
-        end
+        end,
+        collate ! cancel,
+        twitterminer_pipeline:terminate(P)
     end),
+  register(linktoterminate, T),
 
   Res = twitterminer_pipeline:join(P),
   T ! cancel,
   Res.
+
+stop_miner() ->
+  linktoterminate ! cancel.
 
 %% @doc Create a pipeline that connects to twitter and
 %% prints tweets.
@@ -237,12 +239,12 @@ decorate_with_id(B) ->
   end.
 
 parseT([], _) -> ok;
-parseT(L, TweetInfo) -> parseT(L, [], TweetInfo).
+parseT(L, Tweet) -> parseT(L, [], Tweet).
 
-parseT([], Tags, TweetInfo) -> collate ! {hashtags, Tags, TweetInfo};
-parseT([H|T], Tags, TweetInfo) -> 
+parseT([], Tags, Tweet) -> collate ! {hashtags, Tags, Tweet};
+parseT([H|T], Tags, Tweet) -> 
   {[{_,Tag},{_,_}]} = H,
-  parseT(T, [Tag|Tags], TweetInfo).
+  parseT(T, [Tag|Tags], Tweet).
   % {[{_,Tag},{_,_}]} = H, 
   % io:format("TAG: ~ts~n", [Tag]), 
   % parseT(T).
