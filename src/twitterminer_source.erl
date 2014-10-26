@@ -1,6 +1,6 @@
 -module(twitterminer_source).
 
--export([collater/1,twitter_example/1, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1]).
+-export([collater/1,twitter_example/0, twitter_print_pipeline/2, twitter_producer/2, get_account_keys/1, stop_miner/0]).
 
 -record(account_keys, {api_key, api_secret,
                        access_token, access_token_secret}).
@@ -19,55 +19,6 @@ get_account_keys(Name) ->
                 access_token_secret=keyfind(access_token_secret, Keys)}.
 
 
-%%-------------------Alt implementation---------------%%
-% countTags([H|T]) ->
-%   if
-%     is_list(H) ->
-%       [H1|_] = H,
-%       io:format("Tag: ~ts", [H1]),
-%       io:format(" x ~B~n", [length(H)]);
-%     true ->
-%       io:format("Tag: ~ts", [H]),
-%       io:format(" x ~B~n", [1])
-    
-%   end,
-%   countTags(T).
-
-% splitList([], _, R) -> R;
-% splitList([H|[H1|[]]], Acc, R) when H =:= H1 ->
-%   splitList([], [], [[H1|[H|Acc]]|R]);
-% splitList([H|[H1|[]]], Acc, R) when H /= H1 ->
-%   splitList([], [], [H1|[[H|Acc]|R]]);
-% splitList([H|[H1|T1]], Acc, R) when H =:= H1 ->
-%   splitList([H1|T1], [H|Acc], R);
-% splitList([H|[H1|T1]], Acc, R) when H /= H1 ->
-%   splitList([H1|T1], [], [[H|Acc]|R]).
-
-% collater(L) -> 
-%   receive
-%     {hashtags, Tag} ->
-%       % io:format("TAG: ~ts~n", [Tag]),
-%       collater([Tag|L]);
-%     cancel ->
-%       X = lists:sort(L),
-%       Y = splitList(X, [], []),
-%       countTags(lists:sort(X)),
-%       io:format("Total Tags x ~B~n", [length(L)])
-%   end.
-%%-------------------/Alt implementation---------------%%
-
-%%Naively aggregates the tag count of a sorted list (sorted required as tags compared consecutively).
-% countTags([], []) -> ok;
-% countTags([], L) -> L;
-
-% countTags([{Tag, X}|[]], L) ->
-%   countTags([], [{X, Tag}|L]);
-
-% countTags([{Tag1, X}|[{Tag1, Y}|Rest]], L) ->
-%   countTags([{Tag1, X+Y}|Rest], L);
-
-% countTags([{Tag, X}|T], L) ->
-%   countTags(T, [{X, Tag}|L]).
 
 %% Pushes each tag to to Riak
 collater(PutRiak) -> 
@@ -83,12 +34,11 @@ collater(PutRiak) ->
 
 %% @doc This example will download a sample of tweets and print it.
 
-twitter_example(Time) ->
+twitter_example() ->
   IP = "172.31.40.116",
   SocketPID = twitterminer_riak:riakSocket(IP),
   DeleteSocketPID = twitterminer_riak:riakSocket(IP),
-  % SocketPID = spawn_link(twitterminer_riak, riakSocket, [IP]),
-  % PutRiak = twitterminer_riak:riakPut(SocketPID),
+
   PutRiak = spawn_link(twitterminer_riak, riakPut, [SocketPID, DeleteSocketPID, 0, IP]),
 
   URL = "https://stream.twitter.com/1.1/statuses/sample.json",
@@ -258,12 +208,7 @@ my_print(T) ->
       end,
       case extract(<<"text">>, L) of
         {found, _} -> ok;
-        % {found, TT} -> io:format("tweet: ~ts~n", [TT]); % Prints tweet
         not_found -> ok
-          %case extract(<<"delete">>, L) of
-          %  {found, _} -> io:format("deleted: ~p~n", [L]);
-          %  not_found -> io:format("~s~n", [B])
-          %end
       end,
       case extract(<<"entities">>, L) of
         {found, {[{_,[]}|_]}} -> ok;

@@ -4,20 +4,6 @@
 
 -export([riakSocket/1, riakPut/4]).
 
-% REFERENCE
-% putTweet(ID, Tweet, Tag) ->
-% 	Obj = riakc_obj:new(<<"Tweets">>,
-%                     <<ID>>,
-%                     <<"...user data...">>,
-%                     <<"text/plain">>),
-% 	MD1 = riakc_obj:get_update_metadata(Obj),
-% 	MD2 = riakc_obj:set_secondary_index(
-%     	MD1,
-%     	[{{binary_index, "twitter"}, [<<"jsmith123">>]},
-%     	 {{binary_index, "email"}, [<<"jsmith@basho.com">>]}]),
-% 	Obj2 = riakc_obj:update_metadata(Obj, MD2),
-% 	riakc_pb_socket:put(Pid, Obj2).
-
 
 % Build Socket
 riakSocket(IP) -> 
@@ -34,8 +20,6 @@ riakSocket(IP) ->
 riakPut(SocketPID, DeleteSocketPID, Count, IP) when Count > 100 ->
   receive
     {store, Tag, CoTags, Tweet} -> 
-        io:format("SocketPID : ~p~n", [process_info(SocketPID, [memory, message_queue_len])]),
-        io:format("DeleteSocketPID : ~p~n", [process_info(DeleteSocketPID, [memory, message_queue_len])]),
         NewDeleteSocketPID = riakSocket(IP),
         spawn(fun() -> createRiakObj(Tag, CoTags, Tweet, SocketPID) end),
         spawn(fun() -> deleteOld(DeleteSocketPID, Tag, stop) end),
@@ -134,8 +118,3 @@ timeStamp() ->
 oldTimeStamp() ->
 	{Mega, Secs, Micro} = erlang:now(),
 	Mega*1000*1000*1000*1000 + ((Secs - 1200) * 1000 * 1000) + Micro.
-
-
-	% {ok, Results} = riakc_pb_socket:get_index_range(Pid, <<"GonzaloHiguain">>, {integer_index, "timestamp"},1413218244414109, 1413236001036936)
-  {ok, {_,Results,_,_}} = riakc_pb_socket:get_index_range(Pid5,<<"porn">>,{integer_index, "timestamp"}, 1413218244414109, HighTime1). %% origin timestamp should eventually have some logic attached
-  {Mega11, Secs11, Micro11} = erlang:now(), HighTime1 = Mega11*1000*1000*1000*1000 + ((Secs11 - 1200) * 1000 * 1000) + Micro11.
